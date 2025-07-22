@@ -192,7 +192,11 @@ export const updateMail = async (req, res) => {
     //updating customed labels for each user
     if ('customLabels' in req.body) {
       if (!mail.customLabels) mail.customLabels = new Map();
-      mail.customLabels.set(userKey, req.body.customLabels);
+      
+      const userKey = String(req.userId);
+      const labels = Array.isArray(req.body.customLabels) ? req.body.customLabels : [];
+
+      mail.customLabels.set(userKey, labels);
       mail.markModified('customLabels');
     }
 
