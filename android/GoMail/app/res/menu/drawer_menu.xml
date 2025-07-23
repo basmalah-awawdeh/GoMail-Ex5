@@ -1,9 +1,0 @@
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/nav_inbox" android:title="@string/inbox" android:icon="@drawable/ic_inbox"/>
-    <item android:id="@+id/nav_sent" android:title="@string/send" android:icon="@drawable/ic_send"/>
-    <item android:id="@+id/nav_spam" android:title="@string/spam" android:icon="@drawable/ic_spam"/>
-    <item android:id="@+id/nav_important" android:title="@string/important" android:icon="@drawable/ic_important"/>
-    <item android:id="@+id/nav_drafts" android:title="@string/drafts" android:icon="@drawable/ic_draft"/>
-    <item android:id="@+id/nav_add_label" android:title="@string/add_label" android:icon="@drawable/ic_label"/>
-    <item android:id="@+id/nav_logout" android:title="@string/logout" android:icon="@drawable/ic_logout" />
-</menu>
