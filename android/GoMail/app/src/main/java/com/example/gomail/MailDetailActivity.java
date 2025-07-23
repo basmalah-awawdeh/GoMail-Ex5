@@ -18,63 +18,81 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
-//displaying the details of the mails and alloxing marking to labels or deleting
+/**
+ * This activity displays the details of a selected mail.
+ * It allows users to mark the mail as spam or important, delete it, or move it to a custom label.
+ */
 public class MailDetailActivity extends AppCompatActivity {
     private TextView fromText, subjectText, bodyText, dateText, textTo;
     private String mailId;
     private String token;
 
-    private Button spamBtn, importantBtn, deleteBtn;
+    // Label states
+    private boolean isSpam = false;
+    private boolean isImportant = false;
+
+    private Button spamBtn, importantBtn, deleteBtn, moveLabelBtn;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_mail_detail);
 
-        //toolbar with back button
+        // Setup toolbar with back navigation
         Toolbar toolbar = findViewById(R.id.toolbar_detail);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
             getSupportActionBar().setDisplayShowHomeEnabled(true);
         }
-        //initializing the text fields
+
+        // Initialize views
         fromText = findViewById(R.id.textFrom);
         textTo = findViewById(R.id.textTo);
         subjectText = findViewById(R.id.textSubject);
         dateText = findViewById(R.id.textDate);
         bodyText = findViewById(R.id.textBody);
 
-        // initializing buttons and disable them until the data is loaded
+        // Setup action buttons (initially disabled until data loads)
         spamBtn = findViewById(R.id.buttonSpam);
         importantBtn = findViewById(R.id.buttonImportant);
         deleteBtn = findViewById(R.id.buttonDelete);
+        moveLabelBtn = findViewById(R.id.buttonMoveLabel);
+
         spamBtn.setEnabled(false);
         importantBtn.setEnabled(false);
         deleteBtn.setEnabled(false);
-        //getting token and mailId from intent
+        moveLabelBtn.setEnabled(false);
+
+        // Move to custom label handler
+        moveLabelBtn.setOnClickListener(v -> showLabelPickerDialog());
+
+        // Get user token and mail ID
         token = getSharedPreferences("GoMailPrefs", MODE_PRIVATE).getString("auth_token", null);
         mailId = getIntent().getStringExtra("mail_id");
-        System.out.println("mailId being used: " + mailId);
 
         if (mailId != null) {
-            //fetching mail details from backend
-            loadMail(mailId);
+            loadMail(mailId); // Fetch mail details from backend
         } else {
             Toast.makeText(this, "No mail ID provided", Toast.LENGTH_SHORT).show();
         }
-        //buton listeners
+
+        // Set click listeners for spam, important, and delete buttons
         spamBtn.setOnClickListener(v -> markLabel("spam"));
         importantBtn.setOnClickListener(v -> markLabel("important"));
         deleteBtn.setOnClickListener(v -> deleteMail());
     }
-//back button enabling
+
+    // Handle back button in toolbar
     @Override
     public boolean onSupportNavigateUp() {
         finish();
         return true;
     }
-//fetching mails details by id
+
+    /**
+     * Fetch mail details from backend and populate UI
+     */
     private void loadMail(String mailId) {
         new Thread(() -> {
             try {
@@ -86,14 +104,16 @@ public class MailDetailActivity extends AppCompatActivity {
                 System.out.println("PATCH response code: " + code);
 
                 if (code == 200) {
-                    //reading the backend response
+                    // Read response JSON
                     BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                     StringBuilder sb = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) sb.append(line);
                     reader.close();
+
                     JSONObject obj = new JSONObject(sb.toString());
-                    //setting all fields from json
+
+                    // Update UI on main thread
                     runOnUiThread(() -> {
                         String to = obj.optString("toName", obj.optString("to", ""));
                         textTo.setText("To: " + to);
@@ -107,11 +127,32 @@ public class MailDetailActivity extends AppCompatActivity {
                         dateText.setText(formatDate(timestamp));
                         bodyText.setText(body);
 
-                        //enabling the buttons only after loading
+                        // Check if the mail is labeled as spam or important
+                        String userId = getSharedPreferences("GoMailPrefs", MODE_PRIVATE)
+                                .getString("user_id", null);
+                        JSONObject labelsObj = obj.optJSONObject("labels");
+                        if (labelsObj != null && userId != null && labelsObj.has(userId)) {
+                            JSONArray userLabels = labelsObj.optJSONArray(userId);
+                            if (userLabels != null) {
+                                for (int i = 0; i < userLabels.length(); i++) {
+                                    String label = userLabels.optString(i);
+                                    if (label.equals("spam")) isSpam = true;
+                                    if (label.equals("important")) isImportant = true;
+                                }
+                            }
+                        }
+
+                        // Update button text based on current label state
+                        spamBtn.setText(isSpam ? "Unspam" : "Spam");
+                        importantBtn.setText(isImportant ? "Unimportant" : "Important");
+
+                        // Enable actions
                         spamBtn.setEnabled(true);
                         importantBtn.setEnabled(true);
                         deleteBtn.setEnabled(true);
+                        moveLabelBtn.setEnabled(true);
                     });
+
                 } else {
                     runOnUiThread(() -> subjectText.setText("Failed to load mail"));
                 }
@@ -121,17 +162,21 @@ public class MailDetailActivity extends AppCompatActivity {
             }
         }).start();
     }
-//patching mark mail as spam or important request
+
+    /**
+     * Toggle label ("spam" or "important") for the mail using PATCH
+     */
     private void markLabel(String label) {
         new Thread(() -> {
             try {
                 URL url = new URL("http://10.0.2.2:3003/api/mails/" + mailId);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("PATCH"); // <-- Use PATCH directly
+                conn.setRequestMethod("PATCH");
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                 conn.setRequestProperty("Authorization", "Bearer " + token);
                 conn.setDoOutput(true);
-                //sending the label in request body
+
+                // Add label to JSON body
                 JSONObject json = new JSONObject();
                 json.put("label", label);
 
@@ -142,11 +187,11 @@ public class MailDetailActivity extends AppCompatActivity {
                 int code = conn.getResponseCode();
                 conn.disconnect();
 
+                // Show result to user
                 runOnUiThread(() -> {
                     if (code == 204) {
                         Toast.makeText(this, label + " label updated", Toast.LENGTH_SHORT).show();
-                        //going back to inbox after update
-                        finish();
+                        finish(); // Go back to inbox
                     } else {
                         Toast.makeText(this, "Failed to mark: " + code, Toast.LENGTH_SHORT).show();
                     }
@@ -158,7 +203,9 @@ public class MailDetailActivity extends AppCompatActivity {
         }).start();
     }
 
-//handling delete request
+    /**
+     * Delete the mail from server
+     */
     private void deleteMail() {
         new Thread(() -> {
             try {
@@ -184,7 +231,10 @@ public class MailDetailActivity extends AppCompatActivity {
             }
         }).start();
     }
-//converting ISO 8601 date string to readable format
+
+    /**
+     * Convert ISO date format into a more readable form
+     */
     private String formatDate(String isoDate) {
         try {
             java.text.SimpleDateFormat isoFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
@@ -196,9 +246,93 @@ public class MailDetailActivity extends AppCompatActivity {
             outputFormat.setTimeZone(java.util.TimeZone.getDefault());
 
             return outputFormat.format(date);
-            //parsing fails ==> return raw string
         } catch (Exception e) {
             return isoDate;
         }
+    }
+
+    /**
+     * Fetch available labels from the server and show a picker dialog
+     */
+    private void showLabelPickerDialog() {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://10.0.2.2:3003/api/labels");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) sb.append(line);
+                    reader.close();
+                    JSONArray arr = new JSONArray(sb.toString());
+
+                    // Build a list of label names
+                    List<String> labels = new ArrayList<>();
+                    for (int i = 0; i < arr.length(); i++) {
+                        labels.add(arr.getJSONObject(i).getString("name"));
+                    }
+
+                    // Show selection dialog on main thread
+                    runOnUiThread(() -> {
+                        String[] labelArray = labels.toArray(new String[0]);
+                        new android.app.AlertDialog.Builder(this)
+                                .setTitle("Move to Label")
+                                .setItems(labelArray, (dialog, which) -> {
+                                    String selected = labelArray[which];
+                                    moveToCustomLabel(selected);
+                                })
+                                .show();
+                    });
+                }
+                conn.disconnect();
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Error loading labels: "
+                        + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    /**
+     * Move this mail to a custom label
+     */
+    private void moveToCustomLabel(String labelName) {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://10.0.2.2:3003/api/mails/" + mailId);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("PATCH");
+                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+                conn.setDoOutput(true);
+
+                // Build JSON array of custom labels
+                JSONObject json = new JSONObject();
+                JSONArray arr = new JSONArray();
+                arr.put(labelName);
+                json.put("customLabels", arr);
+
+                OutputStream os = conn.getOutputStream();
+                os.write(json.toString().getBytes());
+                os.flush();
+
+                int code = conn.getResponseCode();
+                conn.disconnect();
+
+                runOnUiThread(() -> {
+                    if (code == 204) {
+                        Toast.makeText(this, "Moved to " + labelName, Toast.LENGTH_SHORT).show();
+                        finish(); // Go back to inbox
+                    } else {
+                        Toast.makeText(this, "Failed to move: " + code, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }).start();
     }
 }
