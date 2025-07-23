@@ -1,0 +1,9 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_inbox" android:title="Inbox" android:icon="@drawable/ic_inbox"/>
+    <item android:id="@+id/nav_sent" android:title="Sent" android:icon="@drawable/ic_send"/>
+    <item android:id="@+id/nav_spam" android:title="Spam" android:icon="@drawable/ic_spam"/>
+    <item android:id="@+id/nav_important" android:title="Important" android:icon="@drawable/ic_important"/>
+    <item android:id="@+id/nav_drafts" android:title="Drafts" android:icon="@drawable/ic_draft"/>
+    <item android:id="@+id/nav_add_label" android:title="Add Label" android:icon="@drawable/ic_label"/>
+    <item android:id="@+id/nav_logout" android:title="Logout" android:icon="@drawable/ic_logout" />
+</menu>
